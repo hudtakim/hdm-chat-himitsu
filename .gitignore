@@ -1,0 +1,8 @@
+# Jangan upload folder node_modules
+node_modules/
+
+# Jangan upload log npm
+npm-debug.log
+
+# Jangan upload .env jika pakai
+.env
