@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HDM Chat ~ Himitsu</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="./public/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <div id="container">
+    <button id="themeButton" class="theme-btn">Dark Theme</button>
+    <button id="backButton" class="backButton">Back</button>
+    <div class="title">
+      <h2>HDM Chat ~ Himitsu</h2>
+    </div>
+    <div id="status">Connecting...</div>
+    <div id="chat" style="display: flex;">
+      <div id="messages" class="messages"></div>
+      <div id="inputArea" class="input-area">
+      <!----  <input id="msg" placeholder="Type message..." autocomplete="off" disabled> -->
+        <textarea id="msg" placeholder="Type message..." autocomplete="off" disabled ></textarea>
+        <button id="sendBtn" disabled>Send</button>
+      </div>
+      <button id="findBtn" style="margin-top: 10px;">Find Partner</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const html = document.querySelector("html");
+    const status = document.getElementById("status");
+    const chat = document.getElementById("chat");
+    const messages = document.getElementById("messages");
+    const msgInput = document.getElementById("msg");
+    const sendBtn = document.getElementById("sendBtn");
+    const findBtn = document.getElementById("findBtn");
+    const themeButton = document.getElementById("themeButton");
+    const inputArea = document.getElementById("inputArea");
+    const backButton = document.getElementById("backButton");
+    const container = document.getElementById('container');
+
+    msgInput.addEventListener("focus", () => {
+      setTimeout(() => {
+        input.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300); // Tunggu keyboard muncul dulu
+    });
+
+          // Function to check if a string is a valid web URL based on specific criteria
+    const isValidUrl = (string) => {
+      try {
+        const url = string;
+        // Check if the protocol is http or https
+        const hasValidProtocol = url.includes('http');
+        // Check if the hostname contains at least one dot, implying a domain (e.g., .com, .org)
+        // This helps filter out simple local paths or non-domain strings that might otherwise pass URL parsing
+        const hasDomainPart = url.includes('.');
+
+        return hasValidProtocol && hasDomainPart;
+      } catch (e) {
+        // If URL parsing fails, it's not a valid URL
+        return false;
+      }
+    };
+
+    function isEmoji(char) {
+      return /\p{Emoji}/u.test(char);
+    }
+
+    if(localStorage.getItem("hdm-chat-theme") === 'Light Theme'){
+      themeButton.innerText = 'Light Theme';
+      html.style.filter = 'invert(1)';
+      container.className = themeButton.innerText === 'Light Theme' ? 'container dark-container' : 'container light-container';
+    }else{
+      container.className = themeButton.innerText === 'Dark Theme' ? 'container light-container' : 'container dark-container';
+    }
+
+    socket.on("waiting", data => {
+      status.innerText = data.msg;
+      chat.style.display = "block";
+      findBtn.style.display = "none";
+      msgInput.disabled = true;
+      sendBtn.disabled = true;
+      inputArea.style.opacity = '0.4';
+    });
+
+    socket.on("start", () => {
+      status.style.display = "none";  
+      chat.style.display = "block";
+      findBtn.style.display = "none";
+      messages.innerHTML = '';
+      msgInput.disabled = false;
+      sendBtn.disabled = false;
+      inputArea.style.opacity = '1';
+      msgInput.focus();
+    });
+
+    // socket.on("message", data => {
+    //   const div = document.createElement("div");
+    //   div.className = "message partner";
+    //   div.innerText = data;
+    //   messages.appendChild(div);
+    //   messages.scrollTop = messages.scrollHeight;
+    // });
+
+    socket.on("message", data => {
+      const div = document.createElement("div");
+      div.className = "message partner";
+
+      //if (isValidUrl(data)) {
+        // If data is a valid URL, create an anchor tag
+        const wordList = data.split(/\s+/);
+        for(let i=0; i<wordList.length;i++){
+          if(isValidUrl(wordList[i])){
+            let anchor = document.createElement("a");
+            anchor.href = wordList[i];
+            anchor.target = "_blank"; // Open link in a new tab
+            anchor.rel = "noopener noreferrer"; // Security best practice for target="_blank"
+            anchor.innerText = wordList[i];
+            div.appendChild(anchor); // Append the anchor to the div
+          }else{
+            let span = document.createElement("span");
+            if(isEmoji(wordList[i])) span.className = "emoji-span";
+            span.innerText = wordList[i];
+            div.appendChild(span); // Append the anchor to the div
+          }
+        }
+        div.style.display = 'flex';
+        div.style.flexDirection = 'row';
+        div.style.flexWrap = 'wrap';
+        div.style.gap = '4px';
+      // } else {
+      //   // If data is not a valid URL, set it as plain text
+      //   let span = document.createElement("span");
+      //   span.innerText = data;
+      //   div.appendChild(span);
+      //   //div.innerText = data;
+      // }
+
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    });
+
+
+    socket.on("end", () => {
+      const div = document.createElement("div");
+      div.className = "message system";
+      div.innerText = "Partner disconnected.";
+      messages.appendChild(div);
+      findBtn.style.display = "inline-block";
+      msgInput.disabled = true;
+      sendBtn.disabled = true;
+      inputArea.style.opacity = '0.4';
+    });
+
+    function send() {
+      const msg = msgInput.value.trim();
+      if (msg) {
+        socket.emit("message", msg);
+        const div = document.createElement("div");
+        div.className = "message you";
+
+     //   if (isValidUrl(msg)) {
+          // If msg is a valid URL, create an anchor tag
+        const wordList = msg.split(/\s+/);
+        for(let i=0; i<wordList.length;i++){
+          if(isValidUrl(wordList[i])){
+            let anchor = document.createElement("a");
+            anchor.href = wordList[i];
+            anchor.target = "_blank"; // Open link in a new tab
+            anchor.rel = "noopener noreferrer"; // Security best practice for target="_blank"
+            anchor.innerText = wordList[i];
+            anchor.style.color = 'white';
+            div.appendChild(anchor); // Append the anchor to the div
+          }else{
+            let span = document.createElement("span");
+            if(isEmoji(wordList[i])) span.className = "emoji-span";
+            span.innerText = wordList[i];
+            div.appendChild(span); // Append the anchor to the div
+          }
+        }
+        div.style.display = 'flex';
+        div.style.flexDirection = 'row';
+        div.style.flexWrap = 'wrap';
+        div.style.gap = '4px';
+        // } else {
+        //   // If msg is not a valid URL, set it as plain text
+        //   let span = document.createElement("span");
+        //   if(themeButton.innerText === "Light Theme" && isEmoji(msg)) span.className = "dark-emoji-span";
+        //   span.innerText = msg;
+        //   div.appendChild(span);
+        // }
+
+        messages.appendChild(div);
+        msgInput.value = "";
+        messages.scrollTop = messages.scrollHeight;
+      }
+    }
+
+    function setTheme() {
+      themeButton.innerText = themeButton.innerText === 'Dark Theme' ? 'Light Theme' : 'Dark Theme';
+      html.style.filter = themeButton.innerText === 'Dark Theme' ? 'invert(0)' : 'invert(1)'; 
+      container.className = html.style.filter === 'invert(1)' ? 'container dark-container' : 'container light-container';
+      localStorage.setItem('hdm-chat-theme', themeButton.innerText);
+    }
+
+    function backToMain() {
+      window.location.replace('/');
+    }
+
+    sendBtn.onclick = send; 
+    themeButton.onclick = setTheme;
+    backButton.onclick = backToMain;
+
+    function isMobileDevice() {
+      return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    // function goFullScreen() {
+    //   if (!document.fullscreenElement && isMobileDevice()) {
+    //     document.documentElement.requestFullscreen();
+    //   }
+    // }
+
+    // function setRealHeight() {
+    //   const vh = window.innerHeight * 0.01;
+    //   document.documentElement.style.setProperty('--vh', `${vh}px`);
+    // }
+
+    // if(isMobileDevice){
+    //   // Run on load
+    //   setRealHeight();
+    //   // Run on resize or orientation change
+    //   window.addEventListener('resize', setRealHeight);
+    // }
+
+    //container.onclick = goFullScreen;
+
+    msgInput.addEventListener("keypress", function(e) {
+    if (e.key === "Enter" && !e.shiftKey && !isMobileDevice()) {
+      e.preventDefault();
+      send();
+    }
+});
+
+    findBtn.onclick = function () {
+      socket.emit("find");
+      status.innerText = "Finding new partner...";
+      status.style.display = "block";
+      findBtn.style.display = "none";
+      msgInput.disabled = true;
+      sendBtn.disabled = true;
+      inputArea.style.opacity = '0.4';
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HDM Chat ~ Himitsu</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="./public/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <div class="container" style="align-items: center;">
+    <button id="themeButton" class="theme-btn">Dark Theme</button>
+    <div class="title">
+      <h2>HDM Chat ~ Himitsu</h2>
+    </div>
+    <div id="chat" style="display: flex; justify-content: center;">
+      <a href="/chat.html">
+        <button id="startBtn" style="padding: 1rem 2rem;">Click here to start chatting!</button>
+      </a>
+    </div>
+  </div>
+
+  <script>
+      const socket = io();
+      const html = document.querySelector("html");
+      const themeButton = document.getElementById("themeButton");
+      const startBtn = document.getElementById("startBtn");
+
+      function isMobileDevice() {
+        return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+
+      function goToChat() {
+        if (!document.fullscreenElement && isMobileDevice()) {
+          document.documentElement.requestFullscreen();
+        }
+      }
+
+    //  startBtn.onclick = goToChat;
+
+      if(localStorage.getItem("hdm-chat-theme") === 'Light Theme'){
+        themeButton.innerText = 'Light Theme';
+        html.style.filter = 'invert(1)';
+      }
+
+      function setTheme() {
+        themeButton.innerText = themeButton.innerText === 'Dark Theme' ? 'Light Theme' : 'Dark Theme';
+        html.style.filter = themeButton.innerText === 'Dark Theme' ? 'invert(0)' : 'invert(1)'; 
+        localStorage.setItem('hdm-chat-theme', themeButton.innerText);
+      }
+
+      themeButton.onclick = setTheme;
+
+    </script>
+</body>
+</html>
