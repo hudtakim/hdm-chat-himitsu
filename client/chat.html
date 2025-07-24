@@ -63,7 +63,8 @@
     };
 
     function isEmoji(char) {
-      return /\p{Emoji}/u.test(char);
+      // Match emoji characters that are usually used as standalone
+      return /[\p{Extended_Pictographic}]/u.test(char);
     }
 
     if(localStorage.getItem("hdm-chat-theme") === 'Light Theme'){
