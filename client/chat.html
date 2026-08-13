@@ -22,8 +22,7 @@
     <div id="chat" style="display: flex;">
       <div id="messages" class="messages"></div>
       <div id="inputArea" class="input-area">
-      <!----  <input id="msg" placeholder="Type message..." autocomplete="off" disabled> -->
-        <textarea id="msg" placeholder="Type message..." autocomplete="off" disabled ></textarea>
+        <textarea id="msg" placeholder="Type message..." autocomplete="off" disabled></textarea>
         <button id="imageBtn" disabled>Image</button>
         <button id="sendBtn" disabled>Send</button>
         <input id="imageInput" type="file" accept="image/*" hidden>
@@ -73,7 +72,8 @@
     const imageViewerImg = document.getElementById("imageViewerImg");
     const closeImageViewerBtn = document.getElementById("closeImageViewerBtn");
     let waitingTimer = null;
-    let pendingImageFile = null;
+    let pendingDataUrl = null; // Diubah dari pendingImageFile ke pendingDataUrl
+    
     let imageSensorEnabled = localStorage.getItem("hdm-chat-image-sensor");
     if (imageSensorEnabled === null) {
       imageSensorEnabled = true;
@@ -93,7 +93,6 @@
         const url = string;
         const hasValidProtocol = url.includes('http');
         const hasDomainPart = url.includes('.');
-
         return hasValidProtocol && hasDomainPart;
       } catch (e) {
         return false;
@@ -292,6 +291,18 @@
       inputArea.style.opacity = '0.4';
     });
 
+    // Penambahan Indikator Reconnect
+    socket.on("disconnect", () => {
+      status.innerText = "Reconnecting...";
+      status.style.display = "block";
+    });
+
+    socket.on("connect", () => {
+      if (msgInput.disabled === false) {
+        status.style.display = "none";
+      }
+    });
+
     function send() {
       const msg = msgInput.value.trim();
       if (msg) {
@@ -300,35 +311,6 @@
         msgInput.value = "";
         messages.scrollTop = messages.scrollHeight;
       }
-    }
-
-    function sendImageFile(file) {
-      if (!file) {
-        return;
-      }
-
-      if (file.type && file.type.indexOf("image/") !== 0) {
-          alert("File yang dipilih bukan format gambar yang dikenali.");
-          return;
-        }
-
-      if (file.size > 7 * 1024 * 1024) {
-        alert("Gambar terlalu besar. Pilih file di bawah 7 MB.");
-        return;
-      }
-      
-
-      const reader = new FileReader();
-      reader.onload = function () {
-        const payload = {
-          type: "image",
-          dataUrl: reader.result,
-        };
-
-        socket.emit("message", payload);
-        appendOutgoingMessage(payload);
-      };
-      reader.readAsDataURL(file);
     }
 
     function setTheme() {
@@ -383,32 +365,65 @@
       enterWaitingState("Finding new partner...");
     };
 
+    // ALUR PEMBACAAN GAMBAR BARU (Diperbaiki untuk Mobile)
     imageInput.onchange = function () {
       if (imageInput.files && imageInput.files[0]) {
-        pendingImageFile = imageInput.files[0];
+        const file = imageInput.files[0];
+
+        // Validasi ukuran di awal
+        if (file.size > 7 * 1024 * 1024) {
+          alert("Gambar terlalu besar. Pilih file di bawah 7 MB.");
+          imageInput.value = "";
+          return;
+        }
+
         const reader = new FileReader();
-        reader.onload = function () {
-          imagePreviewImg.src = reader.result;
+        reader.onload = function (e) {
+          // Simpan Base64 ke dalam variabel, jangan baca file ulang nanti
+          pendingDataUrl = e.target.result;
+          imagePreviewImg.src = pendingDataUrl;
           imagePreviewModal.classList.add("visible");
           imagePreviewModal.setAttribute("aria-hidden", "false");
+          
+          // Kosongkan input HANYA setelah file selesai dibaca agar aman di memori HP
+          imageInput.value = "";
         };
-        reader.readAsDataURL(pendingImageFile);
-        imageInput.value = "";
+
+        reader.onerror = function () {
+          alert("Gagal membaca gambar dari perangkat.");
+          imageInput.value = "";
+        };
+
+        reader.readAsDataURL(file);
       }
     };
 
     cancelImageBtn.onclick = function () {
-      pendingImageFile = null;
+      pendingDataUrl = null;
       imagePreviewImg.src = "";
       imagePreviewModal.classList.remove("visible");
       imagePreviewModal.setAttribute("aria-hidden", "true");
     };
 
     confirmImageBtn.onclick = function () {
-      if (pendingImageFile) {
-        sendImageFile(pendingImageFile);
+      // Cek status socket agar aman saat kembali dari galeri HP
+      if (!socket.connected) {
+        alert("Koneksi terputus sebentar. Tunggu 2-3 detik lalu tekan Send kembali.");
+        return;
       }
-      pendingImageFile = null;
+
+      if (pendingDataUrl) {
+        const payload = {
+          type: "image",
+          dataUrl: pendingDataUrl, // Langsung kirim Base64 yang sudah tersimpan
+        };
+        
+        socket.emit("message", payload);
+        appendOutgoingMessage(payload);
+      }
+      
+      // Reset Modal
+      pendingDataUrl = null;
       imagePreviewImg.src = "";
       imagePreviewModal.classList.remove("visible");
       imagePreviewModal.setAttribute("aria-hidden", "true");
