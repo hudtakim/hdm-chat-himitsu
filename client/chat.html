@@ -307,14 +307,16 @@
         return;
       }
 
-      if (!file.type || file.type.indexOf("image/") !== 0) {
-        return;
-      }
+      if (file.type && file.type.indexOf("image/") !== 0) {
+          alert("File yang dipilih bukan format gambar yang dikenali.");
+          return;
+        }
 
       if (file.size > 7 * 1024 * 1024) {
         alert("Gambar terlalu besar. Pilih file di bawah 7 MB.");
         return;
       }
+      
 
       const reader = new FileReader();
       reader.onload = function () {
