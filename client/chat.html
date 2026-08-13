@@ -7,22 +7,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-  <div id="container">
-    <button id="themeButton" class="theme-btn">Dark Theme</button>
+  <div id="container" class="container chat-container">
+    <button id="themeButton" class="theme-btn icon-btn" aria-label="Toggle theme" title="Toggle theme">
+      <span id="themeIcon" aria-hidden="true">☾</span>
+    </button>
     <button id="backButton" class="backButton">Back</button>
     <div class="title">
       <h2>HDM Chat ~ Himitsu</h2>
     </div>
     <div id="status">Connecting...</div>
+    <div class="chat-toolbar">
+      <button id="sensorBtn" disabled>Sensor ON</button>
+    </div>
     <div id="chat" style="display: flex;">
       <div id="messages" class="messages"></div>
       <div id="inputArea" class="input-area">
       <!----  <input id="msg" placeholder="Type message..." autocomplete="off" disabled> -->
         <textarea id="msg" placeholder="Type message..." autocomplete="off" disabled ></textarea>
+        <button id="imageBtn" disabled>Image</button>
         <button id="sendBtn" disabled>Send</button>
+        <input id="imageInput" type="file" accept="image/*" hidden>
       </div>
       <button id="findBtn" style="margin-top: 10px;">Find Partner</button>
+      <button id="rematchBtn" style="margin-top: 10px; display: none;">Match Again</button>
     </div>
+  </div>
+  <div id="imagePreviewModal" class="image-preview-modal" aria-hidden="true">
+    <div class="image-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <h3 id="imagePreviewTitle">Preview image</h3>
+      <img id="imagePreviewImg" class="image-preview-img" alt="Selected image preview">
+      <div class="image-preview-actions">
+        <button id="cancelImageBtn" type="button">Cancel</button>
+        <button id="confirmImageBtn" type="button">Send</button>
+      </div>
+    </div>
+  </div>
+  <div id="imageViewerModal" class="image-viewer-modal" aria-hidden="true">
+    <button id="closeImageViewerBtn" class="image-viewer-close" type="button" aria-label="Close image viewer">×</button>
+    <img id="imageViewerImg" class="image-viewer-img" alt="Full size image">
   </div>
 
   <script>
@@ -33,31 +55,47 @@
     const messages = document.getElementById("messages");
     const msgInput = document.getElementById("msg");
     const sendBtn = document.getElementById("sendBtn");
+    const sensorBtn = document.getElementById("sensorBtn");
+    const imageBtn = document.getElementById("imageBtn");
+    const imageInput = document.getElementById("imageInput");
     const findBtn = document.getElementById("findBtn");
+    const rematchBtn = document.getElementById("rematchBtn");
     const themeButton = document.getElementById("themeButton");
+    const themeIcon = document.getElementById("themeIcon");
     const inputArea = document.getElementById("inputArea");
     const backButton = document.getElementById("backButton");
     const container = document.getElementById('container');
+    const imagePreviewModal = document.getElementById("imagePreviewModal");
+    const imagePreviewImg = document.getElementById("imagePreviewImg");
+    const cancelImageBtn = document.getElementById("cancelImageBtn");
+    const confirmImageBtn = document.getElementById("confirmImageBtn");
+    const imageViewerModal = document.getElementById("imageViewerModal");
+    const imageViewerImg = document.getElementById("imageViewerImg");
+    const closeImageViewerBtn = document.getElementById("closeImageViewerBtn");
+    let waitingTimer = null;
+    let pendingImageFile = null;
+    let imageSensorEnabled = localStorage.getItem("hdm-chat-image-sensor");
+    if (imageSensorEnabled === null) {
+      imageSensorEnabled = true;
+      localStorage.setItem("hdm-chat-image-sensor", "on");
+    } else {
+      imageSensorEnabled = imageSensorEnabled === "on";
+    }
 
     msgInput.addEventListener("focus", () => {
       setTimeout(() => {
-        input.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 300); // Tunggu keyboard muncul dulu
+        msgInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
     });
 
-          // Function to check if a string is a valid web URL based on specific criteria
     const isValidUrl = (string) => {
       try {
         const url = string;
-        // Check if the protocol is http or https
         const hasValidProtocol = url.includes('http');
-        // Check if the hostname contains at least one dot, implying a domain (e.g., .com, .org)
-        // This helps filter out simple local paths or non-domain strings that might otherwise pass URL parsing
         const hasDomainPart = url.includes('.');
 
         return hasValidProtocol && hasDomainPart;
       } catch (e) {
-        // If URL parsing fails, it's not a valid URL
         return false;
       }
     };
@@ -66,89 +104,191 @@
       return /\p{Emoji}/u.test(char);
     }
 
-    if(localStorage.getItem("hdm-chat-theme") === 'Light Theme'){
-      themeButton.innerText = 'Light Theme';
-      html.style.filter = 'invert(1)';
-      container.className = themeButton.innerText === 'Light Theme' ? 'container dark-container' : 'container light-container';
-    }else{
-      container.className = themeButton.innerText === 'Dark Theme' ? 'container light-container' : 'container dark-container';
+    function openImageViewer(dataUrl) {
+      imageViewerImg.src = dataUrl;
+      imageViewerModal.classList.add("visible");
+      imageViewerModal.setAttribute("aria-hidden", "false");
     }
 
-    socket.on("waiting", data => {
-      status.innerText = data.msg;
-      chat.style.display = "block";
-      findBtn.style.display = "none";
-      msgInput.disabled = true;
-      sendBtn.disabled = true;
-      inputArea.style.opacity = '0.4';
-    });
+    function closeImageViewer() {
+      imageViewerImg.src = "";
+      imageViewerModal.classList.remove("visible");
+      imageViewerModal.setAttribute("aria-hidden", "true");
+    }
 
-    socket.on("start", () => {
-      status.style.display = "none";  
-      chat.style.display = "block";
-      findBtn.style.display = "none";
-      messages.innerHTML = '';
-      msgInput.disabled = false;
-      sendBtn.disabled = false;
-      inputArea.style.opacity = '1';
-      msgInput.focus();
-    });
-
-    // socket.on("message", data => {
-    //   const div = document.createElement("div");
-    //   div.className = "message partner";
-    //   div.innerText = data;
-    //   messages.appendChild(div);
-    //   messages.scrollTop = messages.scrollHeight;
-    // });
-
-    socket.on("message", data => {
-      const div = document.createElement("div");
-      div.className = "message partner";
-
-      //if (isValidUrl(data)) {
-        // If data is a valid URL, create an anchor tag
-        const wordList = data.split(/\s+/);
-        for(let i=0; i<wordList.length;i++){
-          if(isValidUrl(wordList[i])){
-            let anchor = document.createElement("a");
-            anchor.href = wordList[i];
-            anchor.target = "_blank"; // Open link in a new tab
-            anchor.rel = "noopener noreferrer"; // Security best practice for target="_blank"
-            anchor.innerText = wordList[i];
-            div.appendChild(anchor); // Append the anchor to the div
-          }else{
-            let span = document.createElement("span");
-            if(isEmoji(wordList[i])) span.className = "emoji-span";
-            span.innerText = wordList[i];
-            div.appendChild(span); // Append the anchor to the div
-          }
+    function syncImageSensorState() {
+      const images = messages.querySelectorAll(".message.partner .chat-image");
+      images.forEach((img) => {
+        if (imageSensorEnabled) {
+          img.classList.add("image-sensor-blurred");
+        } else {
+          img.classList.remove("image-sensor-blurred");
         }
-        div.style.display = 'flex';
-        div.style.flexDirection = 'row';
-        div.style.flexWrap = 'wrap';
-        div.style.gap = '4px';
-      // } else {
-      //   // If data is not a valid URL, set it as plain text
-      //   let span = document.createElement("span");
-      //   span.innerText = data;
-      //   div.appendChild(span);
-      //   //div.innerText = data;
-      // }
+      });
+    }
+
+    function buildTextBubble(text, className) {
+      const div = document.createElement("div");
+      div.className = className;
+
+      const wordList = text.split(/\s+/);
+      for (let i = 0; i < wordList.length; i++) {
+        if (isValidUrl(wordList[i])) {
+          let anchor = document.createElement("a");
+          anchor.href = wordList[i];
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.innerText = wordList[i];
+          if (className === "message you") {
+            anchor.style.color = "white";
+          }
+          div.appendChild(anchor);
+        } else {
+          let span = document.createElement("span");
+          if (isEmoji(wordList[i])) span.className = "emoji-span";
+          span.innerText = wordList[i];
+          div.appendChild(span);
+        }
+      }
+
+      div.style.display = "flex";
+      div.style.flexDirection = "row";
+      div.style.flexWrap = "wrap";
+      div.style.gap = "4px";
+
+      return div;
+    }
+
+    function buildImageBubble(dataUrl, fileName, className) {
+      const div = document.createElement("div");
+      div.className = className + " image-message";
+
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "image";
+      img.className = "chat-image";
+
+      if (imageSensorEnabled && className.indexOf("partner") !== -1) {
+        img.classList.add("image-sensor-blurred");
+      }
+
+      img.addEventListener("click", () => {
+        openImageViewer(img.src);
+      });
+
+      div.appendChild(img);
+
+      return div;
+    }
+
+    function appendIncomingMessage(data) {
+      const isImageMessage = data && typeof data === "object" && data.type === "image";
+      const div = isImageMessage
+        ? buildImageBubble(data.dataUrl, data.name, "message partner")
+        : buildTextBubble(String(data), "message partner");
 
       messages.appendChild(div);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    function appendOutgoingMessage(data) {
+      const isImageMessage = data && typeof data === "object" && data.type === "image";
+      const div = isImageMessage
+        ? buildImageBubble(data.dataUrl, data.name, "message you")
+        : buildTextBubble(String(data), "message you");
+
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function clearWaitingTimer() {
+      if (waitingTimer) {
+        clearTimeout(waitingTimer);
+        waitingTimer = null;
+      }
+    }
+
+    function scheduleRematchButton() {
+      clearWaitingTimer();
+      rematchBtn.style.display = "none";
+      waitingTimer = setTimeout(() => {
+        rematchBtn.style.display = "inline-block";
+      }, 5000);
+    }
+
+    function hideRematchButton() {
+      clearWaitingTimer();
+      rematchBtn.style.display = "none";
+    }
+
+    function enterWaitingState(message) {
+      status.innerText = message;
+      status.style.display = "block";
+      chat.style.display = "block";
+      findBtn.style.display = "none";
+      hideRematchButton();
+      scheduleRematchButton();
+      msgInput.disabled = true;
+      sendBtn.disabled = true;
+      sensorBtn.disabled = true;
+      imageBtn.disabled = true;
+      inputArea.style.opacity = '0.4';
+    }
+
+    if(localStorage.getItem("hdm-chat-theme") === 'Light Theme'){
+      html.style.filter = 'invert(1)';
+      themeIcon.innerText = '☀';
+      themeButton.setAttribute('aria-label', 'Switch to dark theme');
+      themeButton.setAttribute('title', 'Switch to dark theme');
+    }else{
+      themeIcon.innerText = '☾';
+      themeButton.setAttribute('aria-label', 'Switch to light theme');
+      themeButton.setAttribute('title', 'Switch to light theme');
+    }
+
+    function updateSensorButton() {
+      sensorBtn.innerText = imageSensorEnabled ? 'Sensor ON' : 'Sensor OFF';
+      sensorBtn.classList.toggle("active", imageSensorEnabled);
+    }
+
+    updateSensorButton();
+
+    socket.on("waiting", data => {
+      enterWaitingState(data.msg);
     });
 
+    socket.on("start", () => {
+      clearWaitingTimer();
+      status.style.display = "none";
+      chat.style.display = "block";
+      findBtn.style.display = "none";
+      hideRematchButton();
+      messages.innerHTML = '';
+      msgInput.disabled = false;
+      sendBtn.disabled = false;
+      sensorBtn.disabled = false;
+      imageBtn.disabled = false;
+      inputArea.style.opacity = '1';
+      msgInput.focus();
+      syncImageSensorState();
+    });
+
+    socket.on("message", data => {
+      appendIncomingMessage(data);
+    });
 
     socket.on("end", () => {
+      clearWaitingTimer();
       const div = document.createElement("div");
       div.className = "message system";
       div.innerText = "Partner disconnected.";
       messages.appendChild(div);
       findBtn.style.display = "inline-block";
+      rematchBtn.style.display = "none";
       msgInput.disabled = true;
       sendBtn.disabled = true;
+      sensorBtn.disabled = true;
+      imageBtn.disabled = true;
       inputArea.style.opacity = '0.4';
     });
 
@@ -156,58 +296,62 @@
       const msg = msgInput.value.trim();
       if (msg) {
         socket.emit("message", msg);
-        const div = document.createElement("div");
-        div.className = "message you";
-
-     //   if (isValidUrl(msg)) {
-          // If msg is a valid URL, create an anchor tag
-        const wordList = msg.split(/\s+/);
-        for(let i=0; i<wordList.length;i++){
-          if(isValidUrl(wordList[i])){
-            let anchor = document.createElement("a");
-            anchor.href = wordList[i];
-            anchor.target = "_blank"; // Open link in a new tab
-            anchor.rel = "noopener noreferrer"; // Security best practice for target="_blank"
-            anchor.innerText = wordList[i];
-            anchor.style.color = 'white';
-            div.appendChild(anchor); // Append the anchor to the div
-          }else{
-            let span = document.createElement("span");
-            if(isEmoji(wordList[i])) span.className = "emoji-span";
-            span.innerText = wordList[i];
-            div.appendChild(span); // Append the anchor to the div
-          }
-        }
-        div.style.display = 'flex';
-        div.style.flexDirection = 'row';
-        div.style.flexWrap = 'wrap';
-        div.style.gap = '4px';
-        // } else {
-        //   // If msg is not a valid URL, set it as plain text
-        //   let span = document.createElement("span");
-        //   if(themeButton.innerText === "Light Theme" && isEmoji(msg)) span.className = "dark-emoji-span";
-        //   span.innerText = msg;
-        //   div.appendChild(span);
-        // }
-
-        messages.appendChild(div);
+        appendOutgoingMessage(msg);
         msgInput.value = "";
         messages.scrollTop = messages.scrollHeight;
       }
     }
 
+    function sendImageFile(file) {
+      if (!file) {
+        return;
+      }
+
+      if (!file.type || file.type.indexOf("image/") !== 0) {
+        return;
+      }
+
+      if (file.size > 7 * 1024 * 1024) {
+        alert("Gambar terlalu besar. Pilih file di bawah 7 MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        const payload = {
+          type: "image",
+          dataUrl: reader.result,
+        };
+
+        socket.emit("message", payload);
+        appendOutgoingMessage(payload);
+      };
+      reader.readAsDataURL(file);
+    }
+
     function setTheme() {
-      themeButton.innerText = themeButton.innerText === 'Dark Theme' ? 'Light Theme' : 'Dark Theme';
-      html.style.filter = themeButton.innerText === 'Dark Theme' ? 'invert(0)' : 'invert(1)'; 
-      container.className = html.style.filter === 'invert(1)' ? 'container dark-container' : 'container light-container';
-      localStorage.setItem('hdm-chat-theme', themeButton.innerText);
+      const isLight = html.style.filter === 'invert(1)';
+      html.style.filter = isLight ? 'invert(0)' : 'invert(1)';
+      themeIcon.innerText = isLight ? '☾' : '☀';
+      themeButton.setAttribute('aria-label', isLight ? 'Switch to light theme' : 'Switch to dark theme');
+      themeButton.setAttribute('title', isLight ? 'Switch to light theme' : 'Switch to dark theme');
+      localStorage.setItem('hdm-chat-theme', isLight ? 'Dark Theme' : 'Light Theme');
     }
 
     function backToMain() {
       window.location.replace('/');
     }
 
-    sendBtn.onclick = send; 
+    sendBtn.onclick = send;
+    sensorBtn.onclick = function () {
+      imageSensorEnabled = !imageSensorEnabled;
+      localStorage.setItem("hdm-chat-image-sensor", imageSensorEnabled ? "on" : "off");
+      updateSensorButton();
+      syncImageSensorState();
+    };
+    imageBtn.onclick = function () {
+      imageInput.click();
+    };
     themeButton.onclick = setTheme;
     backButton.onclick = backToMain;
 
@@ -215,32 +359,12 @@
       return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     }
 
-    // function goFullScreen() {
-    //   if (!document.fullscreenElement && isMobileDevice()) {
-    //     document.documentElement.requestFullscreen();
-    //   }
-    // }
-
-    // function setRealHeight() {
-    //   const vh = window.innerHeight * 0.01;
-    //   document.documentElement.style.setProperty('--vh', `${vh}px`);
-    // }
-
-    // if(isMobileDevice){
-    //   // Run on load
-    //   setRealHeight();
-    //   // Run on resize or orientation change
-    //   window.addEventListener('resize', setRealHeight);
-    // }
-
-    //container.onclick = goFullScreen;
-
     msgInput.addEventListener("keypress", function(e) {
-    if (e.key === "Enter" && !e.shiftKey && !isMobileDevice()) {
-      e.preventDefault();
-      send();
-    }
-});
+      if (e.key === "Enter" && !e.shiftKey && !isMobileDevice()) {
+        e.preventDefault();
+        send();
+      }
+    });
 
     findBtn.onclick = function () {
       socket.emit("find");
@@ -250,6 +374,49 @@
       msgInput.disabled = true;
       sendBtn.disabled = true;
       inputArea.style.opacity = '0.4';
+    };
+
+    rematchBtn.onclick = function () {
+      socket.emit("find");
+      enterWaitingState("Finding new partner...");
+    };
+
+    imageInput.onchange = function () {
+      if (imageInput.files && imageInput.files[0]) {
+        pendingImageFile = imageInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function () {
+          imagePreviewImg.src = reader.result;
+          imagePreviewModal.classList.add("visible");
+          imagePreviewModal.setAttribute("aria-hidden", "false");
+        };
+        reader.readAsDataURL(pendingImageFile);
+        imageInput.value = "";
+      }
+    };
+
+    cancelImageBtn.onclick = function () {
+      pendingImageFile = null;
+      imagePreviewImg.src = "";
+      imagePreviewModal.classList.remove("visible");
+      imagePreviewModal.setAttribute("aria-hidden", "true");
+    };
+
+    confirmImageBtn.onclick = function () {
+      if (pendingImageFile) {
+        sendImageFile(pendingImageFile);
+      }
+      pendingImageFile = null;
+      imagePreviewImg.src = "";
+      imagePreviewModal.classList.remove("visible");
+      imagePreviewModal.setAttribute("aria-hidden", "true");
+    };
+
+    closeImageViewerBtn.onclick = closeImageViewer;
+    imageViewerModal.onclick = function (event) {
+      if (event.target === imageViewerModal) {
+        closeImageViewer();
+      }
     };
   </script>
 </body>
